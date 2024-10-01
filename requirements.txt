@@ -1,0 +1,4 @@
+PyMuPDF  
+azure-openai  
+python-dotenv  
+streamlit  
