@@ -226,64 +226,46 @@ if uploaded_examiner_file:
     with open("temp_examiner.pdf", "wb") as f:
         f.write(uploaded_examiner_file.read())
     extracted_examiner_text = extract_text_from_pdf("temp_examiner.pdf")
-    #st.subheader("Extracted Examiner Document Text")
-    #st.text_area("Examiner Document Text", value=extracted_examiner_text, height=300)
 
     if st.button("Check for Conflicts"):
         conflict_results_raw = check_for_conflicts(extracted_examiner_text)
         st.session_state.conflict_results = conflict_results_raw
 
-        # Display conflict results
-        st.subheader("Conflict Analysis Results")
-        st.text_area("Conflict Analysis Results", value=conflict_results_raw, height=300)
-
         # Show foundational claim
         foundational_claim = re.search(r"FOUNDATIONAL CLAIM:(.*?)(?=DOCUMENTS REFERENCED:)", conflict_results_raw, re.DOTALL)
         if foundational_claim:
             st.session_state.foundational_claim = foundational_claim.group(1).strip()
-            st.subheader("Foundational Claim")
-            st.text(st.session_state.foundational_claim)
-
-        st.session_state.examiner_uploaded = True
+            st.success("Conflicts checked successfully! Foundational claim extracted.")
+        else:
+            st.warning("No foundational claim found in the examiner document.")
 
 # Step 2: After examiner document is uploaded and analyzed
-if st.session_state.get("examiner_uploaded", False):
+if st.session_state.get("conflict_results") is not None:
     uploaded_ref_file = st.file_uploader("Upload Referenced Document", type="pdf", key="referenced")
     if uploaded_ref_file:
         # Extract text from the referenced PDF
         with open("temp_referenced.pdf", "wb") as f:
             f.write(uploaded_ref_file.read())
         extracted_ref_text = extract_text_from_pdf("temp_referenced.pdf")
-        #st.subheader("Extracted Referenced Document Text")
-        #st.text_area("Referenced Document Text", value=extracted_ref_text, height=300)
 
-        if st.button("Analyze Figures"):
+        if st.button("Analyze Figures and Cited Text"):
             figure_analysis_results = extract_figures_and_text(st.session_state.conflict_results, extracted_ref_text)
             st.session_state.figure_analysis = figure_analysis_results
-
-            # Display figure analysis results
-            st.subheader("Figure Analysis Results")
-            st.text_area("Figure Analysis Results", value=figure_analysis_results, height=300)
-
-            st.session_state.referenced_uploaded = True
+            st.success("Figure analysis completed successfully!")
 
 # Step 3: After referenced document is uploaded and analyzed
-if st.session_state.get("referenced_uploaded", False):
+if st.session_state.get("figure_analysis") is not None:
     uploaded_filed_app = st.file_uploader("Upload Application as Filed", type="pdf", key="filed")
     if uploaded_filed_app:
         # Extract text from the filed application
         with open("temp_filed.pdf", "wb") as f:
             f.write(uploaded_filed_app.read())
         extracted_filed_app_text = extract_text_from_pdf("temp_filed.pdf")
-        #st.subheader("Extracted Filed Application Text")
-        #st.text_area("Filed Application Text", value=extracted_filed_app_text, height=300)
 
         if st.button("Analyze Filed Application"):
             filed_app_analysis_results = analyze_filed_application(extracted_filed_app_text, st.session_state.foundational_claim, st.session_state.figure_analysis)
             st.session_state.filed_application_analysis = filed_app_analysis_results
-
-            # Display filed application analysis results
-            st.subheader("Filed Application Analysis Results")
+            st.success("Filed application analysis completed successfully!")
             st.text_area("Filed Application Analysis Results", value=filed_app_analysis_results, height=300)
 
 # Option to download results
@@ -299,5 +281,3 @@ if st.session_state.filed_application_analysis:
             file_name="filed_application_analysis.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-else:
-    st.warning("No analysis available to download.")
