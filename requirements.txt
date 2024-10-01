@@ -1,4 +1,6 @@
 PyMuPDF  
-azure-openai  
+openai 
 python-dotenv  
-streamlit  
+regex  
+streamlit 
+python-docx  
