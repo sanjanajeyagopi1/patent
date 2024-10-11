@@ -386,7 +386,7 @@ Provide arguments for novelty and non-obviousness over the cited reference.Ident
 Identify limitations in the current claims and propose specific language or structural changes that address those limitations.Propose New Arguments or Amendments  
 Propose new arguments or amendments that distinguish the foundational claim from the cited prior art and strengthen the application. Ensure to include multiple amendments for thorough differentiation in depth.Maintain Original Intent  
 Note:Ensure the amendments maintain the original intent of the claims while improving clarity and scope.
-Note:Do the numbering in bullets and not in numbers.
+Note:Do the numbering in bullets and not in numbers. Do not give the markdown interface.
 Note: Wherever U.S.C 102 is mentioned, it should be printed as U.S.C 102 (Lack of Novelty), and wherever U.S.C 103 is mentioned, it should be printed as U.S.C 103 (Obviousness).  
     """  
       
@@ -452,7 +452,7 @@ Provide arguments for novelty and non-obviousness over the cited reference.Ident
 Identify limitations in the current claims and propose specific language or structural changes that address those limitations.Propose New Arguments or Amendments  
 Propose new arguments or amendments that distinguish the foundational claim from the cited prior art and strengthen the application. Ensure to include multiple amendments for thorough differentiation in depth.Maintain Original Intent  
 Note:Ensure the amendments maintain the original intent of the claims while improving clarity and scope.  
-Note:Do the numbering in bullets and not in numbers.
+Note:Do the numbering in bullets and not in numbers. Do not give the markdown interface.
 Note: Wherever U.S.C 102 is mentioned, it should be printed as U.S.C 102 (Lack of Novelty), and wherever U.S.C 103 is mentioned, it should be printed as U.S.C 103 (Obviousness).  
     """  
       
