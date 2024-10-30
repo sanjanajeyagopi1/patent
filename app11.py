@@ -193,8 +193,7 @@ def determine_domain_expertise(action_document_text):
         return (None, None, None) 
     
 def check_for_conflicts(action_document_text, domain, expertise, style):  
-    """  
-    Analyzes the action document and extracts:  
+    """Analyzes the action document and extracts:  
     - Foundational claim  
     - Referenced documents  
     - Figures and technical text related to them  
@@ -207,14 +206,14 @@ def check_for_conflicts(action_document_text, domain, expertise, style):
     You are now assuming the role of a deeply specialized expert in {domain} as well as a comprehensive understanding of patent law specific to the mentioned domain. Your expertise includes:  
     1. {domain}  
     2. Patent Law Proficiency:  
-       a. Skilled in interpreting and evaluating patent claims, classifications, and legal terminologies.  
-       b. Knowledgeable about the structure and requirements of patent applications.  
-       c. Expertise in comparing similar documents for patent claims under sections U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).  
+        a. Skilled in interpreting and evaluating patent claims, classifications, and legal terminologies.  
+        b. Knowledgeable about the structure and requirements of patent applications.  
+        c. Expertise in comparing similar documents for patent claims under sections U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).  
     3. {expertise}  
     4. Capability to Propose Amendments:  
-       a. Experienced in responding to examiners’ assertions or rejections of claims.  
-       b. Skilled in proposing suitable amendments to patent claims to address rejections under U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).  
-       c. Proficient in articulating and justifying amendments to ensure compliance with patentability requirements.  
+        a. Experienced in responding to examiners’ assertions or rejections of claims.  
+        b. Skilled in proposing suitable amendments to patent claims to address rejections under U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).  
+        c. Proficient in articulating and justifying amendments to ensure compliance with patentability requirements.  
     Adopt a {style} suitable for analyzing patent applications in the given domain and subject matter. Your analysis should include:  
     a. A thorough evaluation of the technical details and functionalities described in the patent application.  
     b. An assessment of the clarity and precision of the technical descriptions and diagrams.  
@@ -258,7 +257,7 @@ def check_for_conflicts(action_document_text, domain, expertise, style):
         },  
     ]  
   
-    def call_api_with_retries():
+    def call_api_with_retries():  
         max_retries = 3  
         retry_delay = 2  # seconds  
         for attempt in range(max_retries):  
@@ -278,41 +277,39 @@ def check_for_conflicts(action_document_text, domain, expertise, style):
         response = call_api_with_retries()  
   
         # Extract the response content  
-        content = response.choices[0].message.content.strip()
-        
+        content = response.choices[0].message.content.strip()  
+  
         # Locate the JSON within triple backticks  
-        start_index = content.find("```json")
-        if start_index != -1:
-            end_index = content.find("```", start_index + 7)
-            if end_index != -1:
-                content = content[start_index + 7:end_index].strip()
-            else:
-                content = content[start_index + 7:].strip()
-        
-        # Log if no JSON is found
-        if not content:
-            logging.error("No JSON content extracted.")
-            return None
+        start_index = content.find("```json")  
+        if start_index != -1:  
+            end_index = content.find("```", start_index + 7)  
+            if end_index != -1:  
+                json_string = content[start_index + 7:end_index].strip()  
+            else:  
+                json_string = content[start_index + 7:].strip()  
   
         # Validate and parse using Pydantic  
-        try:  
-            # Parse the JSON to ensure it's valid  
-            json_data = json.loads(content)  
-            # Validate with Pydantic model  
-            conflict_results = ConflictResults(**json_data)  
-            return conflict_results.dict()  
-        except json.JSONDecodeError as e:  
-            logging.error(f"JSON decoding error: {str(e)}")  
-            logging.error(f"Content causing error: {content}")  
+        if json_string:  
+            try:  
+                # Parse the JSON to ensure it's valid  
+                json_data = json.loads(json_string)  
+                # Validate with Pydantic model  
+                conflict_results = ConflictResults(**json_data)  
+                return conflict_results.dict()  
+            except json.JSONDecodeError as e:  
+                logging.error(f"JSON decoding error: {str(e)}")  
+                logging.error(f"Content causing error: {json_string}")  
+                return None  
+            except ValidationError as e:  
+                logging.error(f"Validation error: {str(e)}")  
+                logging.error(f"Content causing error: {json_string}")  
+                return None  
+        else:  
+            logging.error("No JSON content extracted.")  
             return None  
-        except ValidationError as e:  
-            logging.error(f"Validation error: {str(e)}")  
-            logging.error(f"Content causing error: {content}")  
-            return None  
-  
     except Exception as e:  
         logging.error(f"Error during conflict checking: {str(e)}")  
-        return None   
+        return None  
   
 
 # Function to extract and analyze figure-related details  
@@ -406,42 +403,44 @@ def extract_figures_and_text(conflict_results, ref_documents_texts, domain, expe
     ]  
   
     # Call OpenAI API for figure analysis  
-    try:
-        response = client.chat.completions.create(
-            model="GPT-4-Omni", messages=messages, temperature=0.2
-        )
-
-        # Check if the response has content and parse it
-        analysis_output = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
-        
-        # Debug print statements
-        print("Raw API response:\n", response.choices[0].message.content)
-
-        # Handle JSON output with flexible parsing for backticks
-        if analysis_output.startswith("```json"):
-            analysis_output = analysis_output[7:-3].strip()
-        elif analysis_output.startswith("```"):
-            analysis_output = analysis_output[3:-3].strip()
-
-        # Validate and parse JSON output
-        if analysis_output:
-            try:
-                figure_analysis_results = FigureAnalysisResults.model_validate_json(analysis_output)
-                return figure_analysis_results.model_dump()
-            except json.JSONDecodeError as e:
-                print(f"JSON decoding error during validation: {e}")
-                print(f"Analysis output content causing error: {analysis_output}")
-                return None
-            except ValidationError as e:
-                print(f"Validation error: {e.json()}")
-                return None
-        else:
-            print("No content received from OpenAI API.")
-            return None
-
-    except Exception as e:
-        print(f"Unexpected error: {e}")
-        return None
+    try:  
+        response = client.chat.completions.create(  
+            model="GPT-4-Omni", messages=messages, temperature=0.2  
+        )  
+        # Check if the response has content and parse it  
+        analysis_output = response.choices[0].message.content.strip() if response.choices[0].message.content else ""  
+  
+        # Debug print statements  
+        print("Raw API response:\n", response.choices[0].message.content)  
+  
+        # Handle JSON output with flexible parsing for backticks  
+        if analysis_output.startswith("```json"):  
+            analysis_output = analysis_output[7:-3].strip()  
+        elif analysis_output.startswith("```"):  
+            analysis_output = analysis_output[3:-3].strip()  
+  
+        # Validate and parse JSON output  
+        if analysis_output:  
+            try:  
+                # Parse the JSON to ensure it's valid  
+                json_data = json.loads(analysis_output)  
+                # Validate with Pydantic model  
+                figure_analysis_results = FigureAnalysisResults(**json_data)  
+                return figure_analysis_results.dict()  
+            except json.JSONDecodeError as e:  
+                print(f"JSON decoding error during validation: {e}")  
+                print(f"Analysis output content causing error: {analysis_output}")  
+                return None  
+            except ValidationError as e:  
+                print(f"Validation error: {e.json()}")  
+                print(f"Analysis output content causing error: {analysis_output}")  
+                return None  
+        else:  
+            print("No content received from OpenAI API.")  
+            return None  
+    except Exception as e:  
+        print(f"Unexpected error: {e}")  
+        return None 
 
 
 def extract_details_from_filed_application(filed_application_text, foundational_claim, domain, expertise, style):  
@@ -506,38 +505,51 @@ def extract_details_from_filed_application(filed_application_text, foundational_
     ]  
   
     # Call OpenAI API for extracting details from the filed application  
-    # Call OpenAI API for extracting details from the filed application
-    try:
-        response = client.chat.completions.create(
-            model="GPT-4-Omni", messages=messages, temperature=0.2
-        )
-        analysis_output = response.choices[0].message.content.strip()
-
-        # Remove backticks if they exist
-        if analysis_output.startswith("```json"):
-            analysis_output = analysis_output[7:-3].strip()
-        elif analysis_output.startswith("```"):
-            analysis_output = analysis_output[3:-3].strip()
-
-        # Print raw response for debugging
-        print(f"Raw response: {analysis_output}")
-
-        # Validate JSON structure
-        try:
-            parsed_json = json.loads(analysis_output)  # Use json.loads for preliminary validation
-            details = FoundationalClaimDetails.model_validate(parsed_json)  # Pydantic model for final validation
-            return details.model_dump()
-        except json.JSONDecodeError as e:
-            print(f"JSON decoding error: {e}")
-            print(f"Raw response: {analysis_output}")
-            return None
-        except ValidationError as e:
-            print(f"Validation error: {e.json()}")
-            return None
-
-    except Exception as e:
-        print(f"Error extracting details from filed application: {e}")
-        return None
+    try:  
+        response = client.chat.completions.create(  
+            model="GPT-4-Omni", messages=messages, temperature=0.2  
+        )  
+          
+        # Extract the response content  
+        content = response.choices[0].message.content.strip()  
+  
+        # Locate the JSON within triple backticks  
+        start_index = content.find("```json")  
+        if start_index != -1:  
+            end_index = content.find("```", start_index + 7)  
+            if end_index != -1:  
+                json_string = content[start_index + 7:end_index].strip()  
+            else:  
+                json_string = content[start_index + 7:].strip()  
+        else:  
+            # If no JSON block is found, treat the entire content as potential JSON  
+            json_string = content  
+  
+        # Print raw response for debugging  
+        print(f"Raw response: {content}")  
+  
+        # Validate JSON structure  
+        if json_string:  
+            try:  
+                # Parse the JSON to ensure it's valid  
+                parsed_json = json.loads(json_string)  
+                # Validate with Pydantic model  
+                details = FoundationalClaimDetails(**parsed_json)  
+                return details.dict()  
+            except json.JSONDecodeError as e:  
+                print(f"JSON decoding error: {e}")  
+                print(f"Raw response: {json_string}")  
+                return None  
+            except ValidationError as e:  
+                print(f"Validation error: {e.json()}")  
+                print(f"Raw response: {json_string}")  
+                return None  
+        else:  
+            print("No JSON content extracted.")  
+            return None  
+    except Exception as e:  
+        print(f"Error extracting details from filed application: {e}")  
+        return None 
 
   
 # Function to extract details from pending claims and modify the filed application details  
@@ -609,32 +621,47 @@ def extract_and_modify_filed_application(filed_application_details, pending_clai
         response = client.chat.completions.create(  
             model="GPT-4-Omni", messages=messages, temperature=0.2  
         )  
-        analysis_output = response.choices[0].message.content.strip()  
           
-        # Remove the triple backticks if they exist  
-        if analysis_output.startswith("```json"):  
-            analysis_output = analysis_output[7:-3].strip()  
-        elif analysis_output.startswith("```"):  
-            analysis_output = analysis_output[3:-3].strip()  
-          
-        # Print the raw response for debugging  
-        print(f"Raw response: {response.choices[0].message.content}")  
-          
-        # Validate and parse using Pydantic  
-        try:  
-            details = FoundationalClaimDetails.model_validate_json(analysis_output)  
-            return details.model_dump()  
-        except ValidationError as e:  
-            print(f"Validation error: {e.json()}")  
-            return None
-        
-    except json.JSONDecodeError as e:  
-        print(f"JSON decoding error: {e}")  
-        print(f"Raw response: {response.choices[0].message.content}")  
-        return None  
+        # Extract the response content  
+        content = response.choices[0].message.content.strip()  
+  
+        # Locate the JSON within triple backticks  
+        start_index = content.find("```json")  
+        if start_index != -1:  
+            end_index = content.find("```", start_index + 7)  
+            if end_index != -1:  
+                json_string = content[start_index + 7:end_index].strip()  
+            else:  
+                json_string = content[start_index + 7:].strip()  
+        else:  
+            # If no JSON block is found, treat the entire content as potential JSON  
+            json_string = content  
+  
+        # Print raw response for debugging  
+        print(f"Raw response: {content}")  
+  
+        # Validate JSON structure  
+        if json_string:  
+            try:  
+                # Parse the JSON to ensure it's valid  
+                parsed_json = json.loads(json_string)  
+                # Validate with Pydantic model  
+                details = FoundationalClaimDetails(**parsed_json)  
+                return details.dict()  
+            except json.JSONDecodeError as e:  
+                print(f"JSON decoding error: {e}")  
+                print(f"Raw response: {json_string}")  
+                return None  
+            except ValidationError as e:  
+                print(f"Validation error: {e.json()}")  
+                print(f"Raw response: {json_string}")  
+                return None  
+        else:  
+            print("No JSON content extracted.")  
+            return None  
     except Exception as e:  
-        print(f"Error extracting and modifying filed application details: {e}")  
-        return None  
+        print(f"Error extracting details from filed application: {e}")  
+        return None 
   
  
 # Function to analyze the filed application based on the foundational claim, figure analysis, and application details  
@@ -685,7 +712,7 @@ def analyze_filed_application(extracted_details, foundational_claim, figure_anal
     - **Technical Advantages**: Enhances communication reliability and reduces interference, as detailed in Paragraph [0046] of the application.  
     - **Addressing Examiner's Rejection**: The prior art only teaches static frequency selection methods, thus the amendment overcomes the rejection by introducing adaptive frequency hopping functionality not suggested in the cited reference.  
     **Propose New Arguments or Amendments:**
-    -**Amendment 1: Enhanced Communication Protocol**  
+    -**Amendment 1:** Enhanced Communication Protocol**  
       
     **Original Claim Language:**  
     "A communication system comprising a transmitter and receiver."  
