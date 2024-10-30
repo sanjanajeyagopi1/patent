@@ -120,10 +120,7 @@ def determine_domain_expertise(action_document_text):
     """Analyze the action document to determine the required domain expertise, experience, and analysis style."""  
     global domain_subject_matter, experience_expertise_qualifications, style_tone_voice  
   
-    prompt = f"""  
-    Analyze the following action document text and determine the domain expertise required to analyze this document:  
-    {action_document_text}  
-  
+    prompt = f"""Analyze the following action document text and determine the domain expertise required to analyze this document: {action_document_text}  
     Step 1: Identify the subject matter and domain expertise required to understand this document and the cited documents in depth.  
     Step 2: Determine the experience, expertise, and educational qualifications required to handle this document and the cited documents in depth.  
     Step 3: Describe the style, tone, and voice required to analyze these kinds of documents.  
@@ -151,144 +148,172 @@ def determine_domain_expertise(action_document_text):
         raw_content = response.choices[0].message.content.strip()  
   
         # Print the raw response for debugging  
-        st.write("Raw API Response:")  
-        st.write(raw_content)  
+        print("Raw API Response:")  
+        print(raw_content)  
   
-        # Remove any non-JSON content using regular expressions  
+        # Use regex to find JSON content  
         json_match = re.search(r'{.*}', raw_content, re.DOTALL)  
         if not json_match:  
-            st.error("No JSON content found in the response.")  
+            print("No JSON content found in the response.")  
             return (None, None, None)  
   
         cleaned_content = json_match.group(0)  
   
+        # Check for code block markers and remove them  
+        if cleaned_content.startswith("```json"):  
+            cleaned_content = cleaned_content[7:-3].strip()  
+        elif cleaned_content.startswith("```"):  
+            cleaned_content = cleaned_content[3:-3].strip()  
+  
         # Print the cleaned content for debugging  
-        st.write("Cleaned API Response:")  
-        st.write(cleaned_content)  
+        print("Cleaned API Response:")  
+        print(cleaned_content)  
   
         # Validate and parse using Pydantic  
         try:  
-            expertise_data = DomainExpertise.model_validate_json(cleaned_content)  
+            # Parse cleaned content as JSON to ensure it's valid  
+            json_data = json.loads(cleaned_content)  
+  
+            # Validate with Pydantic model  
+            expertise_data = DomainExpertise(**json_data)  
             domain_subject_matter = expertise_data.domain_subject_matter  
             experience_expertise_qualifications = expertise_data.experience_expertise_qualifications  
             style_tone_voice = expertise_data.style_tone_voice  
             return (domain_subject_matter, experience_expertise_qualifications, style_tone_voice)  
-        except ValidationError as e:  
-            st.error(f"Validation error: {e.json()}")  
+        except (ValidationError, json.JSONDecodeError) as e:  
+            print(f"Validation or JSON error: {str(e)}")  
             return (None, None, None)  
   
     except Exception as e:  
-        st.error(f"Error during domain expertise determination: {e}")  
+        print(f"Error during domain expertise determination: {str(e)}")  
         return (None, None, None)  
+  
+    except Exception as e:  
+        st.error(f"Error during domain expertise determination: {str(e)}")  
+        return (None, None, None) 
     
-def check_for_conflicts(action_document_text, domain, expertise, style):
-    """
-    Analyzes the action document and extracts:
-    - Foundational claim
-    - Referenced documents
-    - Figures and technical text related to them
-    """
-    global domain_subject_matter, experience_expertise_qualifications, style_tone_voice
-    
-    # Escape curly braces in the action_document_text
-    escaped_text = action_document_text.replace("{", "{{").replace("}", "}}")
-
-    # The content with placeholders dynamically filled
-    content = f"""
-    You are now assuming the role of a deeply specialized expert in {domain} as well as a comprehensive understanding of patent law specific to the mentioned domain. Your expertise includes:
-
-    1. {domain}
-    2. Patent Law Proficiency: 
-    a. Skilled in interpreting and evaluating patent claims, classifications, and legal terminologies.
-    b. Knowledgeable about the structure and requirements of patent applications.
-    c. Expertise in comparing similar documents for patent claims under sections U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).
-
-    3. {expertise}
-    4. Capability to Propose Amendments:
-    a. Experienced in responding to examiners’ assertions or rejections of claims.
-    b. Skilled in proposing suitable amendments to patent claims to address rejections under U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).
-    c. Proficient in articulating and justifying amendments to ensure compliance with patentability requirements.
-
-    Adopt a {style} suitable for analyzing patent applications in the given domain and subject matter. Your analysis should include:
-
-    a. A thorough evaluation of the technical details and functionalities described in the patent application.
-    b. An assessment of the clarity and precision of the technical descriptions and diagrams.
-    c. An analysis of the novelty (under U.S.C 102) and non-obviousness (under U.S.C 103) of the subject matter by comparing it with similar existing documents.
-    d. Feedback on the strengths and potential areas for improvement in the document.
-    e. A determination of whether the invention meets the criteria for patentability under sections U.S.C 102 and U.S.C 103.
-    f. Proposals for suitable amendments to the claims in response to potential examiners’ assertions or rejections, ensuring the claims are robust and meet patentability standards.
-
-    Using this expertise, experience, and educational background, analyze the provided patent application document with a focus on its technical accuracy, clarity, adherence to patent application standards, novelty, non-obviousness, and overall feasibility.
-    """
-    # Print the content to the terminal
-    print("Generated Content for LLM:\n")
-    print(content)
-
-    # Formulate the prompt to be sent to the LLM
-    prompt = f"""
-    Analyze the following action document text and extract the foundational claim:
-    {escaped_text}
-    Step 1: Extract the key claims from the document and name it as 'Key_claims'.
-    Step 2: From the 'Key_claims' extract the foundational claim with its number and store it in a variable called "foundational_claim" (Note: method claims and system claims are not considered independent claims and only one claim can be the foundational claim).
-    Step 3: From the foundational claim, extract the information under U.S.C 102 and/or 103.
-    Step 4: Extract all referenced documents under U.S.C. 102 and/or 103 mentioned in the action document specified only in the "foundational_claim".
-    Step 5: For each referenced document, create a variable that stores the document name.
-    Step 6: If the foundational claim refers to the referenced documents, extract the entire technical content with its specified paragraph location and image reference. Map the claim with the conflicting document name.
-    Step 7: Do not extract any referenced document data that is not related to the foundational claim.   
-    NOTE: Extract in English.
-    NOTE: Give the documents referenced with their publication numbers EG. Deker US...
-    Step 8: Return the output as a JSON object with the following structure:
-    {{
-        "foundational_claim": "text",
-        "documents_referenced": ["doc1", "doc2", ...],
-        "figures": ["fig1", "fig2", ...],
-        "text": "detailed text"
-    }}
-    """
-
-    messages = [
-        {
-            "role": "system",
-            "content": content  # dynamically generated content for the LLM's role
-        },
-        {
-            "role": "user",
-            "content": prompt,  # prompt asking the user for conflict analysis
-        },
-    ]
-
-    # Call the OpenAI API for conflict checking (assuming you have client setup)
-    try:
-        response = client.chat.completions.create(
-            model="GPT-4-Omni", messages=messages, temperature=0.2
-        )
-        # Extract the content and remove the triple backticks if necessary
+def check_for_conflicts(action_document_text, domain, expertise, style):  
+    """  
+    Analyzes the action document and extracts:  
+    - Foundational claim  
+    - Referenced documents  
+    - Figures and technical text related to them  
+    """  
+    # Escape curly braces in the action_document_text  
+    escaped_text = action_document_text.replace("{", "{{").replace("}", "}}")  
+  
+    # The content with placeholders dynamically filled  
+    content = f"""  
+    You are now assuming the role of a deeply specialized expert in {domain} as well as a comprehensive understanding of patent law specific to the mentioned domain. Your expertise includes:  
+    1. {domain}  
+    2. Patent Law Proficiency:  
+       a. Skilled in interpreting and evaluating patent claims, classifications, and legal terminologies.  
+       b. Knowledgeable about the structure and requirements of patent applications.  
+       c. Expertise in comparing similar documents for patent claims under sections U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).  
+    3. {expertise}  
+    4. Capability to Propose Amendments:  
+       a. Experienced in responding to examiners’ assertions or rejections of claims.  
+       b. Skilled in proposing suitable amendments to patent claims to address rejections under U.S.C 102 (novelty) and U.S.C 103 (non-obviousness).  
+       c. Proficient in articulating and justifying amendments to ensure compliance with patentability requirements.  
+    Adopt a {style} suitable for analyzing patent applications in the given domain and subject matter. Your analysis should include:  
+    a. A thorough evaluation of the technical details and functionalities described in the patent application.  
+    b. An assessment of the clarity and precision of the technical descriptions and diagrams.  
+    c. An analysis of the novelty (under U.S.C 102) and non-obviousness (under U.S.C 103) of the subject matter by comparing it with similar existing documents.  
+    d. Feedback on the strengths and potential areas for improvement in the document.  
+    e. A determination of whether the invention meets the criteria for patentability under sections U.S.C 102 and U.S.C 103.  
+    f. Proposals for suitable amendments to the claims in response to potential examiners’ assertions or rejections, ensuring the claims are robust and meet patentability standards.  
+    Using this expertise, experience, and educational background, analyze the provided patent application document with a focus on its technical accuracy, clarity, adherence to patent application standards, novelty, non-obviousness, and overall feasibility.  
+    """  
+  
+    # Formulate the prompt to be sent to the LLM  
+    prompt = f"""  
+    Analyze the following action document text and extract the foundational claim:  
+    {escaped_text}  
+    Step 1: Extract the key claims from the document and name it as 'Key_claims'.  
+    Step 2: From the 'Key_claims' extract the foundational claim with its number and store it in a variable called "foundational_claim" (Note: method claims and system claims are not considered independent claims and only one claim can be the foundational claim).  
+    Step 3: From the foundational claim, extract the information under U.S.C 102 and/or 103.  
+    Step 4: Extract all referenced documents under U.S.C. 102 and/or 103 mentioned in the action document specified only in the "foundational_claim".  
+    Step 5: For each referenced document, create a variable that stores the document name.  
+    Step 6: If the foundational claim refers to the referenced documents, extract the entire technical content with its specified paragraph location and image reference. Map the claim with the conflicting document name.  
+    Step 7: Do not extract any referenced document data that is not related to the foundational claim.  
+    NOTE: Extract in English.  
+    NOTE: Give the documents referenced with their publication numbers EG. Deker US...  
+    Step 8: Return the output as a JSON object with the following structure:  
+    {{  
+        "foundational_claim": "text",  
+        "documents_referenced": ["doc1", "doc2", ...],  
+        "figures": ["fig1", "fig2", ...],  
+        "text": "detailed text"  
+    }}  
+    """  
+  
+    messages = [  
+        {  
+            "role": "system",  
+            "content": content  # dynamically generated content for the LLM's role  
+        },  
+        {  
+            "role": "user",  
+            "content": prompt  # prompt asking the user for conflict analysis  
+        },  
+    ]  
+  
+    def call_api_with_retries():
+        max_retries = 3  
+        retry_delay = 2  # seconds  
+        for attempt in range(max_retries):  
+            try:  
+                response = client.chat.completions.create(  
+                    model="GPT-4-Omni", messages=messages, temperature=0.2  
+                )  
+                return response  
+            except Exception as e:  
+                logging.error(f"API call failed on attempt {attempt + 1}: {str(e)}")  
+                if attempt < max_retries - 1:  
+                    time.sleep(retry_delay)  
+                else:  
+                    raise  
+  
+    try:  
+        response = call_api_with_retries()  
+  
+        # Extract the response content  
         content = response.choices[0].message.content.strip()
-
-        if content.startswith("```json"):
-            content = content[7:-3].strip()
-        elif content.startswith("```"):
-            content = content[3:-3].strip()
-
-        # Print the raw response for debugging
-        print(f"Raw response: {response.choices[0].message.content}")
-
+        
+        # Locate the JSON within triple backticks  
+        start_index = content.find("```json")
+        if start_index != -1:
+            end_index = content.find("```", start_index + 7)
+            if end_index != -1:
+                content = content[start_index + 7:end_index].strip()
+            else:
+                content = content[start_index + 7:].strip()
+        
+        # Log if no JSON is found
+        if not content:
+            logging.error("No JSON content extracted.")
+            return None
+  
         # Validate and parse using Pydantic  
         try:  
-            conflict_results = ConflictResults.model_validate_json(content)  
-            return conflict_results.model_dump()  
+            # Parse the JSON to ensure it's valid  
+            json_data = json.loads(content)  
+            # Validate with Pydantic model  
+            conflict_results = ConflictResults(**json_data)  
+            return conflict_results.dict()  
+        except json.JSONDecodeError as e:  
+            logging.error(f"JSON decoding error: {str(e)}")  
+            logging.error(f"Content causing error: {content}")  
+            return None  
         except ValidationError as e:  
-            print(f"Validation error: {e.json()}")  
-            return None   
-        
-    except json.JSONDecodeError as e:
-        print(f"JSON decoding error: {e}")
-        print(f"Raw response: {response.choices[0].message.content}")
-        return None
-    except Exception as e:
-        print(f"Error during conflict checking: {e}")
-        return None
-
+            logging.error(f"Validation error: {str(e)}")  
+            logging.error(f"Content causing error: {content}")  
+            return None  
+  
+    except Exception as e:  
+        logging.error(f"Error during conflict checking: {str(e)}")  
+        return None   
+  
 
 # Function to extract and analyze figure-related details  
 def extract_figures_and_text(conflict_results, ref_documents_texts, domain, expertise, style):  
@@ -351,22 +376,22 @@ def extract_figures_and_text(conflict_results, ref_documents_texts, domain, expe
     Figures: {json.dumps(fig_details, indent=2)}  
     Text: {text_details}  
     Referenced Document Texts: {json.dumps(ref_documents_texts, indent=2)}  
-    Example Output Format:  
-    {{  
-        "figures_analysis": [  
-            {{  
-                "figure_number": "Figure 1",  
-                "title": "Title of Figure 1",  
-                "technical_details": "Detailed text",  
-                "importance": "Explanation of importance"  
-            }},  
-            ...  
-        ],  
-        "extracted_paragraphs": [  
-            "Paragraph text 1",  
-            ...  
-        ]  
-    }}  
+    Response format:
+    {{
+        "figures_analysis": [
+            {{
+                "figure_number": "Figure 1",
+                "title": "Title of Figure 1",
+                "technical_details": "Detailed technical description",
+                "importance": "Explanation of importance"
+            }},
+            ...
+        ],
+        "extracted_paragraphs": [
+            "Paragraph text 1",
+            ...
+        ]
+    }}
     """  
   
     messages = [  
@@ -381,33 +406,42 @@ def extract_figures_and_text(conflict_results, ref_documents_texts, domain, expe
     ]  
   
     # Call OpenAI API for figure analysis  
-    try:  
-        response = client.chat.completions.create(  
-            model="GPT-4-Omni", messages=messages, temperature=0.2  
-        )  
-        analysis_output = response.choices[0].message.content.strip()  
-  
-        # Remove the triple backticks if they exist  
-        if analysis_output.startswith("```json"):  
-            analysis_output = analysis_output[7:-3].strip()  
-        elif analysis_output.startswith("```"):  
-            analysis_output = analysis_output[3:-3].strip()  
-  
-        # Print the raw response for debugging  
-        print(f"Raw response: {response.choices[0].message.content}")  
-        try:  
-            figure_analysis_results = FigureAnalysisResults.model_validate_json(analysis_output)  
-            return figure_analysis_results.model_dump()  
-        except ValidationError as e:  
-            print(f"Validation error: {e.json()}")  
-            return None 
-    except json.JSONDecodeError as e:  
-        print(f"JSON decoding error: {e}")  
-        print(f"Raw response: {response.choices[0].message.content}")  
-        return None  
-    except Exception as e:  
-        print(f"Error during figure analysis: {e}")  
-        return None  
+    try:
+        response = client.chat.completions.create(
+            model="GPT-4-Omni", messages=messages, temperature=0.2
+        )
+
+        # Check if the response has content and parse it
+        analysis_output = response.choices[0].message.content.strip() if response.choices[0].message.content else ""
+        
+        # Debug print statements
+        print("Raw API response:\n", response.choices[0].message.content)
+
+        # Handle JSON output with flexible parsing for backticks
+        if analysis_output.startswith("```json"):
+            analysis_output = analysis_output[7:-3].strip()
+        elif analysis_output.startswith("```"):
+            analysis_output = analysis_output[3:-3].strip()
+
+        # Validate and parse JSON output
+        if analysis_output:
+            try:
+                figure_analysis_results = FigureAnalysisResults.model_validate_json(analysis_output)
+                return figure_analysis_results.model_dump()
+            except json.JSONDecodeError as e:
+                print(f"JSON decoding error during validation: {e}")
+                print(f"Analysis output content causing error: {analysis_output}")
+                return None
+            except ValidationError as e:
+                print(f"Validation error: {e.json()}")
+                return None
+        else:
+            print("No content received from OpenAI API.")
+            return None
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return None
 
 
 def extract_details_from_filed_application(filed_application_text, foundational_claim, domain, expertise, style):  
@@ -448,15 +482,16 @@ def extract_details_from_filed_application(filed_application_text, foundational_
     1. Identify and extract all technical details from the filed application that relate to the foundational claim.  
     2. Ensure that any extracted details include specific references to the paragraphs or sections in the filed application where they are found. NOTE: Extract in English.  
     3. Return the extracted details in the following JSON format:  
-    {{  
-        "foundational_claim_details": [  
-            {{  
-                "paragraph_number": "Paragraph 1",  
-                "text": "Detailed text related to the foundational claim"  
-            }},  
-            ...  
-        ]  
-    }}  
+    JSON format:
+    {{
+        "foundational_claim_details": [
+            {{
+                "paragraph_number": "Paragraph 1",
+                "text": "Technical text relating to the foundational claim"
+            }},
+            ...
+        ]
+    }}
     """  
   
     messages = [  
@@ -471,36 +506,38 @@ def extract_details_from_filed_application(filed_application_text, foundational_
     ]  
   
     # Call OpenAI API for extracting details from the filed application  
-    try:  
-        response = client.chat.completions.create(  
-            model="GPT-4-Omni", messages=messages, temperature=0.2  
-        )  
-        analysis_output = response.choices[0].message.content.strip()  
-  
-        # Remove the triple backticks if they exist  
-        if analysis_output.startswith("```json"):  
-            analysis_output = analysis_output[7:-3].strip()  
-        elif analysis_output.startswith("```"):  
-            analysis_output = analysis_output[3:-3].strip()  
-  
-        # Print the raw response for debugging  
-        print(f"Raw response: {response.choices[0].message.content}")  
-  
-        # Validate and parse using Pydantic  
-        try:  
-            details = FoundationalClaimDetails.model_validate_json(analysis_output)  
-            return details.model_dump()  
-        except ValidationError as e:  
-            print(f"Validation error: {e.json()}")  
-            return None  
-  
-    except json.JSONDecodeError as e:  
-        print(f"JSON decoding error: {e}")  
-        print(f"Raw response: {response.choices[0].message.content}")  
-        return None  
-    except Exception as e:  
-        print(f"Error extracting details from filed application: {e}")  
-        return None  
+    # Call OpenAI API for extracting details from the filed application
+    try:
+        response = client.chat.completions.create(
+            model="GPT-4-Omni", messages=messages, temperature=0.2
+        )
+        analysis_output = response.choices[0].message.content.strip()
+
+        # Remove backticks if they exist
+        if analysis_output.startswith("```json"):
+            analysis_output = analysis_output[7:-3].strip()
+        elif analysis_output.startswith("```"):
+            analysis_output = analysis_output[3:-3].strip()
+
+        # Print raw response for debugging
+        print(f"Raw response: {analysis_output}")
+
+        # Validate JSON structure
+        try:
+            parsed_json = json.loads(analysis_output)  # Use json.loads for preliminary validation
+            details = FoundationalClaimDetails.model_validate(parsed_json)  # Pydantic model for final validation
+            return details.model_dump()
+        except json.JSONDecodeError as e:
+            print(f"JSON decoding error: {e}")
+            print(f"Raw response: {analysis_output}")
+            return None
+        except ValidationError as e:
+            print(f"Validation error: {e.json()}")
+            return None
+
+    except Exception as e:
+        print(f"Error extracting details from filed application: {e}")
+        return None
 
   
 # Function to extract details from pending claims and modify the filed application details  
@@ -654,8 +691,8 @@ def analyze_filed_application(extracted_details, foundational_claim, figure_anal
     "A communication system comprising a transmitter and receiver."  
       
     **Proposed Amended Language:**  
-    "A communication system comprising a transmitter and receiver, wherein the transmitter is configured to utilize an adaptive frequency hopping protocol to dynamically adjust communication channels based on interference levels." 
-
+    "A communication system comprising a transmitter and receiver, <u> wherein the transmitter is configured to utilize an adaptive frequency hopping protocol to dynamically adjust communication channels based on interference levels </u>." 
+    
     
     """  
       
@@ -664,20 +701,20 @@ def analyze_filed_application(extracted_details, foundational_claim, figure_anal
     **Example Analysis**  
       
     **Key Features of Independent Claim 1**  
-    • Multiparameter Leadset: Configured to interface with a monitoring device for monitoring multiple health indicators of a patient.  
-    • Single Patient Plug: Having a plurality of monitoring contacts.  
+    • **Multiparameter Leadset:** Configured to interface with a monitoring device for monitoring multiple health indicators of a patient.  
+    • **Single Patient Plug:** Having a plurality of monitoring contacts.  
       
     **Key Features of Cited Reference(Naylor):**  
-    • Multiparameter Leadset (Naylor): Depicted in Figure 2, comprising a temperature sensor, non-invasive pulse oximetry sensor, and EKG sensor.  
-    • Junction Box: Connects to a patient monitor via a common output cable, with receptacles for each sensor plug (Figure 2: junction box 226).  
+    • **Multiparameter Leadset (Naylor)**: Depicted in Figure 2, comprising a temperature sensor, non-invasive pulse oximetry sensor, and EKG sensor.  
+    • **Junction Box**: Connects to a patient monitor via a common output cable, with receptacles for each sensor plug (Figure 2: junction box 226).  
       
     **Examiner’s Analysis:**  
     The examiner rejected the application based on U.S.C 103 (Obviousness), asserting that the claimed features are either disclosed or obvious in light of the Naylor reference combined with Morley for the interconnection feature. The examiner interprets the cited reference as teaching or suggesting all elements of the foundational claim, including the use of a multiparameter leadset with a single patient plug and various patient leads for different health indicators. The interconnection feature is deemed obvious for better wire management.  
       
     **Novelty Analysis (U.S.C 102 - Lack of Novelty):**  
     Comparing the foundational claim with the Naylor reference:  
-    • Multiparameter Leadset: Both the foundational claim and Naylor describe a multiparameter leadset.  
-    • Single Patient Plug: Naylor's junction box 226 serves a similar function.  
+    • **Multiparameter Leadset**: Both the foundational claim and Naylor describe a multiparameter leadset.  
+    • **Single Patient Plug**: Naylor's junction box 226 serves a similar function.  
       
     **Non-Obviousness Analysis (U.S.C 103 - Obviousness):**  
     The foundational claim may be considered obvious in light of Naylor combined with Morley:  
@@ -699,18 +736,19 @@ def analyze_filed_application(extracted_details, foundational_claim, figure_anal
       
     IMPORTANT FORMATTING RULES:  
     Numbering and Formatting: Use bullet points (•) instead of numbers when listing items.  
-    Do not include markdown formatting in your response.  
-    Bolden only the headings.  
-    Make your explanations lengthy and cite the sources correctly.  
-    Give amendments for all key features in foundational claim is mandatory.  
-    Do NOT put N/A anywhere and enclose words within asterisks(**)  
-    Make the answers detailed.
-    Do not give extra line spacing.
-    Do not give one line explanations anywhere and make very lengthy.
-    Add the conclusion after proposing amendments.
-    The few shot example is just for understanding the structure.
-    Do not use words like "only"
-      
+    Do not include markdown formatting in your response, except for bolding headings and sub-headings, and underlining as specified.  
+    Bold all headings and sub-headings for clarity.
+    Underline new language in the 'Proposed Amended Language' by enclosing it within '<u>' and '</u>' tags.
+    Provide detailed explanations and cite the sources correctly.  
+    Propose amendments for all key features in foundational claim. 
+    Do NOT include "N/A" anywhere and enclose words within asterisks(**)  
+    Avoid one-line explanations; provid thorough and detailed analysis
+    Maintain concise formatting without extra line spacing
+    Add a conclusion after proposing amendments.
+    The provided examples are for structural guidance only; do not replicate them verbatim.
+    Avoid using words like "only" that may downplay the content
+
+           
     Key Features of Independent Claim with Number:  
     Extract and list the key features of the foundational claim. Ensure to include structural details, functional aspects, and any specific configurations mentioned in the claim.  
       
@@ -734,14 +772,14 @@ def analyze_filed_application(extracted_details, foundational_claim, figure_anal
       
     Proposed Amendments and Arguments:  
     For each key feature point in the foundational claim, propose specific amendments separately. NOTE: for all the points in the foundational claim, it is mandatory to propose amendments.  
-    Present original and proposed versions, highlighting new features, specific materials, or configurations.  
+    Present original and proposed versions, highlighting new features, specific materials, or configurations. **Underline** the new language proposed by enclosing it within '<u>' and '</u>' tags. 
       
     Format for Each Amendment:  
     Amendment [Number]: [Feature Title]  
     Original Claim Language:  
     "[Insert the exact original feature description from the foundational claim.]"  
     Proposed Amended Language:  
-    "[Insert the enhanced feature description, incorporating new details, specific materials, or configurations.]"  
+    "[Insert the enhanced feature description, incorporating new details, specific materials, or configurations.  **Underline** the new language proposed by enclosing it within '<u>' and '</u>' tags.]"  
     Derivation of Amendment:  
     Source Reference: Cite specific sections, paragraphs, figures, or embodiments from the application that support the amendment. Example: "Derived from Paragraph [0123] and Figure 5 of the application."  
     Reasoning: Explain why the amendment was made, detailing how it enhances specificity, overcomes prior art, or adds technical advantages. Highlight any differences from the cited references. Emphasize any technical advantages or improvements introduced by the amendments.  
@@ -768,10 +806,23 @@ def analyze_filed_application(extracted_details, foundational_claim, figure_anal
     Original Claim Language:  
     "[Insert the exact original feature description from the foundational claim.]"  
     Proposed Amended Language:  
-    "[Insert the enhanced feature description, incorporating new details, specific materials, or configurations.]"  
+    "[Insert the enhanced feature description, incorporating new details, specific materials, or configurations.**Underline** the new language proposed by enclosing it within '<u>' and '</u>' tags.]"  
     Derivation of Amendment:  
     Source Reference: Cite specific sections, paragraphs, figures, or embodiments from the application that support the amendment. Example: "Derived from Paragraph [0123] and Figure 5 of the application."  
     Reasoning: Explain why the amendment was made, detailing how it enhances specificity, overcomes prior art, or adds technical advantages. Highlight any differences from the cited references. Emphasize any technical advantages or improvements introduced by the amendments.  
+
+    NOTE:
+    Ensure all headings and sub-headings are bolded as demonstrated in the examples.
+    Maintain the specified formatting to align with the analysis guidelines.
+    Provide detailed explanations in each section, referencing specific parts of the application and cited references.
+    Avoid using markdown formatting beyond bolding headings, as per the instructions.
+    In each **Proposed Amended Language**, the new language introduced to enhance the claim is **underlined** by enclosing it within '<u>' and '</u>' tags to clearly highlight the additions.
+    
+    Additional Guidance:
+    Structure: Follow the sequential order of sections as outlined in the analysis guidelines.
+    Detailing: Expand on explanations, providing in-depth reasoning and evidence.
+    Clarity: Use clear and precise language to articulate points effectively.
+    Consistency: Keep the formatting consistent throughout the analysis.
     """  
       
     messages = [  
@@ -957,13 +1008,14 @@ Ensure that the original intent of the claims is maintained while improving clar
         print(f"Error during modified application analysis: {e}")  
         return None  
   
+  
 def save_analysis_to_word(analysis_output):  
     if analysis_output is None or analysis_output.strip() == "":  
-        st.error("Analysis data is missing or empty.")  
+        print("Analysis data is missing or empty.")  
         return None  
   
     # Create a new Word document  
-    doc =docx.Document()  
+    doc = docx.Document()  
   
     # Add a header with "Privileged & Confidential"  
     section = doc.sections[0]  
@@ -992,19 +1044,23 @@ def save_analysis_to_word(analysis_output):
         else:  
             # Create a new paragraph for normal or mixed text (bold and non-bold)  
             paragraph = doc.add_paragraph()  
-            # Use regex to find text between **...** for bold words  
-            # Split by bold sections while keeping bold markers for processing  
-            parts = re.split(r"(\*\*.*?\*\*)", line)  
+            # Use regex to find text between **...** for bold words and <u>...</u> for underlined words  
+            parts = re.split(r"(\*\*.*?\*\*|<u>.*?</u>)", line)  
             for part in parts:  
                 if part.startswith("**") and part.endswith("**"):  
                     # This is the bold part, remove the '**' and set it as bold  
                     bold_text = part[2:-2]  
                     run = paragraph.add_run(bold_text)  
                     run.bold = True  
+                elif part.startswith("<u>") and part.endswith("</u>"):  
+                    # This is the underlined part, remove the '<u>' and '</u>' and set it as underlined  
+                    underlined_text = part[3:-4]  
+                    run = paragraph.add_run(underlined_text)  
+                    run.underline = True  
                 else:  
                     # This is regular text  
                     paragraph.add_run(part)  
-  
+ 
     # Save the document to a BytesIO buffer instead of writing to disk  
     buffer = BytesIO()  
     doc.save(buffer)  
