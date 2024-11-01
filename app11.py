@@ -1505,6 +1505,7 @@ if st.session_state.get("figure_analysis") is not None:
                         word_path = os.path.join(tmpdirname, word_file.name)  
                         pdf_path = os.path.join(tmpdirname, pdf_file.name)  
   
+                        # Save uploaded files  
                         with open(word_path, "wb") as f:  
                             f.write(word_file.getbuffer())  
                         with open(pdf_path, "wb") as f:  
@@ -1514,11 +1515,13 @@ if st.session_state.get("figure_analysis") is not None:
   
                         with st.spinner("Converting Word to PDF..."):  
                             converted_pdf = convert_word_to_pdf(word_path, os.path.join(tmpdirname, "converted.pdf"))  
+  
                         if converted_pdf:  
                             with st.spinner("Merging PDFs..."):  
                                 merged_pdf = merge_pdfs([converted_pdf, pdf_path], output_pdf_file)  
   
                             st.success("DOCX and PDF have been successfully combined!")  
+  
                             with open(output_pdf_file, "rb") as f:  
                                 st.download_button(  
                                     label="Download Combined PDF",  
@@ -1531,15 +1534,15 @@ if st.session_state.get("figure_analysis") is not None:
                             st.session_state.filed_application_name = pdf_file.name  
   
                             # Proceed with Step 3 as the combined PDF is ready  
-                            with open("temp_filed.pdf", "wb") as f:  
-                                f.write(f.read())  
-                            extracted_filed_app_text = extract_text_from_pdf("temp_filed.pdf")  
-                            os.remove("temp_filed.pdf")  
+                            with open(output_pdf_file, "rb") as f:  
+                                file_content = f.read()  
+  
+                            extracted_filed_app_text = extract_text_from_pdf(output_pdf_file)  
   
                             if extracted_filed_app_text:  
                                 # Process the extracted text  
                                 processed_filed_app_text = process_text(extracted_filed_app_text)  
-                                  
+  
                                 filed_app_details = extract_details_from_filed_application(  
                                     processed_filed_app_text,  
                                     st.session_state.foundational_claim,  
@@ -1575,7 +1578,7 @@ if st.session_state.get("figure_analysis") is not None:
                                     else:  
                                         st.error("Failed to analyze the filed application.")  
                                 else:  
-                                    st.error("Failed to analyze the filed application.")  
+                                    st.error("Failed to extract details from the filed application.")  
                             else:  
                                 st.error("Failed to extract text from the filed application document.")  
                         else:  
@@ -1589,19 +1592,17 @@ if st.session_state.get("figure_analysis") is not None:
   
             if analyze_filed_app_clicked:  
                 if uploaded_filed_app is not None:  
-                    with open("temp_filed.pdf", "wb") as f:  
-                        f.write(uploaded_filed_app.read())  
+                    temp_file_name = "temp_filed.pdf"  
                       
+                    # Save uploaded file  
+                    with open(temp_file_name, "wb") as f:  
+                        f.write(uploaded_filed_app.read())  
+  
                     # Validate the uploaded filed application  
-                    with open("temp_filed.pdf", "rb") as f:   
-                        is_valid_filed = validate_application_as_filed("temp_filed.pdf", st.session_state.application_number)  
+                    is_valid_filed = validate_application_as_filed(temp_file_name, st.session_state.application_number)  
   
                     if is_valid_filed:  
-                        # Reset the file pointer before reading again    
-                        uploaded_filed_app.seek(0)  
-                        extracted_filed_app_text = extract_text_from_pdf("temp_filed.pdf")  
-                          
-                        os.remove("temp_filed.pdf")  
+                        extracted_filed_app_text = extract_text_from_pdf(temp_file_name)  
   
                         if extracted_filed_app_text:  
                             # Process the extracted text  
@@ -1615,7 +1616,6 @@ if st.session_state.get("figure_analysis") is not None:
                                 st.session_state.expertise,  
                                 st.session_state.style  
                             )  
-  
                             if filed_app_details:  
                                 filed_app_details_json = json.dumps(filed_app_details, indent=2)  
                                 st.session_state.filed_application_analysis = filed_app_details_json  
@@ -1628,7 +1628,6 @@ if st.session_state.get("figure_analysis") is not None:
                                     st.session_state.expertise,  
                                     st.session_state.style  
                                 )  
-  
                                 if analysis_results:  
                                     st.session_state.filed_application_analysis = analysis_results  
                                     st.success("Filed application analysis completed successfully!")  
@@ -1642,18 +1641,17 @@ if st.session_state.get("figure_analysis") is not None:
                                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",  
                                             key="filed_application_download"  
                                         )  
-                                else:  
-                                    st.error("Failed to analyze the filed application.")  
                             else:  
                                 st.error("Failed to extract details from the filed application.")  
                         else:  
                             st.error("Failed to extract text from the filed application document.")  
                     else:  
                         st.error("Validation of the filed application failed.")  
-                        os.remove("temp_filed.pdf")  
+                      
+                    # Clean up temporary file  
+                    os.remove(temp_file_name)  
                 else:  
                     st.warning("Please upload the filed application first.")  
-                
 # STEP 4: Pending Claims Analysis
 if st.session_state.get("filed_application_analysis") is not None:  
     with st.expander("Step 4: Pending Claims", expanded=True):  
